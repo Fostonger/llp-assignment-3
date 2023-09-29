@@ -1,0 +1,4 @@
+/lex.yy.c
+/sql
+/sql.tab.c
+/sql.tab.h
