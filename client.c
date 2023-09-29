@@ -117,7 +117,7 @@ void print_cell(literal_T * literal) {
             printf("%.4f", literal->value->flt);
             break;
         case LITERAL_TYPE__T_LIT_BOOLEAN_T:
-            printf("%b", literal->value->boolean);
+            printf("%s", literal->value->boolean ? "true" : "false");
             break;
         case LITERAL_TYPE__T_LIT_STRING_T:
             printf("%s", literal->value->str);

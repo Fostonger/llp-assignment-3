@@ -81,7 +81,7 @@ SELECT name, avg_grade FROM itmo;
 Лог терминала консольного приложения:
 
 ```shell
-/home/rosroble/edu/llp/lab3/cmake-build-debug/client_exe localhost 9090
+./client_exe localhost 9090
 stmt > CREATE TABLE itmo (name varchar, age int, avg_grade float, expelled boolean);
 CREATE TABLE: OK
 stmt > INSERT INTO itmo (name, age, avg_grade, expelled) VALUES ('boris', 20, 4.5, true);
