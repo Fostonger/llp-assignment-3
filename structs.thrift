@@ -14,6 +14,7 @@ enum literal_type_T {
     LIT_STRING_T
     LIT_BOOLEAN_T
     LIT_FLOAT_T
+    LIT_NONE_T
 }
 
 union types_T {

@@ -125,6 +125,8 @@ void print_cell(literal_T * literal) {
         case LITERAL_TYPE__T_LIT_INTEGER_T:
             printf("%d", literal->value->num);
             break;
+        default:
+            break;
     }
 }
 void print_items(item_list_T *items) {

@@ -1,6 +1,7 @@
 #include "request_processor.h"
-#include "server/database.h"
-#include "server/data_iterator.h"
+#include "server/src/database_manager.h"
+#include "server/src/data_iterator.h"
+#include "client/data.h"
 #include <glib-2.0/glib.h>
 #include <glib-2.0/glib-object.h>
 
@@ -22,10 +23,24 @@ CONVERT_ARRAY(literal_T, literal)
 
 CONVERT_ARRAY(columnref_T, column)
 
+column_type translate_thrift_to_fost(gint32 type) {
+    switch (type) {
+        case 2:
+            return STRING;
+        case 1:
+            return INT_32;
+        case 4:
+            return FLOAT;
+        case 3:
+            return BOOL;
+        default:
+            return NONE;
+    }
+}
+
 
 void _handle_column(columndef_T* column_def, table* table) {
-    init_fixedsize_column(table,table->header->columnInitAmount++,
-                          column_def->column_name, column_def->type);
+    add_column(table, column_def->column_name, translate_thrift_to_fost(column_def->type));
 }
 
 void handle_column(gpointer column_def, gpointer table) {
@@ -36,16 +51,18 @@ void handle_column(gpointer column_def, gpointer table) {
 void handle_data_init(data *d, columnref_T *cr, literal_T * l) {
     switch (l->type) {
         case LITERAL_TYPE__T_LIT_FLOAT_T:
-            data_init_float(d, l->value->flt, cr->col_name);
+            data_init_float(d, l->value->flt);
             break;
         case LITERAL_TYPE__T_LIT_INTEGER_T:
-            data_init_integer(d, l->value->num, cr->col_name);
+            data_init_integer(d, l->value->num);
             break;
         case LITERAL_TYPE__T_LIT_STRING_T:
-            data_init_string(d, l->value->str, cr->col_name);
+            data_init_string(d, l->value->str);
             break;
         case LITERAL_TYPE__T_LIT_BOOLEAN_T:
-            data_init_boolean(d, l->value->boolean, cr->col_name);
+            data_init_boolean(d, l->value->boolean);
+            break;
+        default:
             break;
     }
 }
@@ -57,24 +74,27 @@ void init_columns(table* tb, GPtrArray* defs) {
 bool get_literal_value(char* columnName, data_iterator* iter, types_T* val) {
     char buffer[256];
     char* bufferAddress = (char *) buffer;
-    columnHeader *header = get_col_header_by_name(iter->tb, columnName);
+    char *str = NULL;
+    column_header *header = header_from_name(iter->tb->header, columnName);
+    size_t off = offset_to_column(iter->tb->header, columnName, header->type);
     if (!header) return false;
     switch (header->type) {
-        case INTEGER:
+        case INT_32:
             val->__isset_num = true;
-            getInteger(iter, header->columnName, &val->num);
+            get_integer_from_data(iter->cur_data, &val->num, off);
             break;
         case STRING:
-            getString(iter, header->columnName, &bufferAddress);
-            g_object_set(val, "str", strdup(buffer), NULL);
+            get_string_from_data(iter->cur_data, &str, off);
+            g_object_set(val, "str", strdup(str), NULL);
+            free(str);
             break;
-        case BOOLEAN:
+        case BOOL:
             val->__isset_boolean = true;
-            getBool(iter, header->columnName, (bool *) &val->boolean);
+            get_bool_from_data(iter->cur_data, (bool *) &val->boolean, off);
             break;
         case FLOAT:
             val->__isset_flt = true;
-            getFloat(iter, header->columnName, &val->flt);
+            get_float_from_data(iter->cur_data, &val->flt, off);
             break;
         default:
             return false;
@@ -93,39 +113,46 @@ GPtrArray* init_literal_array(size_t length) {
 }
 
 
-literal_type_T nativeTypeToThrift(columnType type) {
+literal_type_T nativeTypeToThrift(column_type type) {
     switch (type) {
-        case INTEGER:
+        case INT_32:
             return LITERAL_TYPE__T_LIT_INTEGER_T;
         case STRING:
             return LITERAL_TYPE__T_LIT_STRING_T;
-        case BOOLEAN:
+        case BOOL:
             return LITERAL_TYPE__T_LIT_BOOLEAN_T;
         case FLOAT:
             return LITERAL_TYPE__T_LIT_FLOAT_T;
+        default:
+            return LITERAL_TYPE__T_LIT_NONE_T;
     }
 }
 
 server_response_T* process_select_statement(const select_stmt_T *stmt, database* db, const char * const name) {
-   table* tb = open_table(db, name);
+    maybe_table tb = read_table(name, db);
 
-    if (!tb)
+    if (tb.error)
         return NEW_RESPONSE(STATUS_CODE__T_TABLE_NOT_FOUND, "ERROR: TABLE NOT FOUND\n");
 
-    data_iterator *iter = init_iterator(db, tb);
+    maybe_data_iterator iter = init_iterator(tb.value);
+    if (iter.error) {
+        release_table(tb.value);
+        return NEW_RESPONSE(STATUS_CODE__T_TABLE_NOT_FOUND, "ERROR: COULD NOT CREATE ITERATOR\n");
+    }
 
     // serialize rows
     GPtrArray *rows = g_ptr_array_new();
 
-    while (seekNextPredicate(iter, stmt->predicate)) {
+    while (seek_next_predicate(iter.value, stmt->predicate)) {
         GPtrArray *literals = init_literal_array(stmt->columns->len);
         for (size_t i = 0; i < stmt->columns->len; i++) {
             columnref_T* currentColumn = stmt->columns->pdata[i];
             literal_T* lit = literals->pdata[i];
             g_object_set(lit,
-                         "type", nativeTypeToThrift(discoverColumnTypeByName(iter, currentColumn->col_name)),
+                         "type", nativeTypeToThrift(type_from_name(tb.value->header, currentColumn->col_name)),
                          NULL);
-            bool success = get_literal_value(currentColumn->col_name, iter, lit->value);
+            printf("col value: %s\n", currentColumn->col_name);
+            bool success = get_literal_value(currentColumn->col_name, iter.value, lit->value);
             if (!success) {
                 return NEW_RESPONSE(STATUS_CODE__T_BAD_REQUEST, "ERROR: Request doesn't match schema\n");
             }
@@ -135,6 +162,7 @@ server_response_T* process_select_statement(const select_stmt_T *stmt, database*
                                   NULL);
         g_ptr_array_add(rows, row);
         g_ptr_array_unref(literals);
+        get_next(iter.value);
     }
 
     item_list_T *items = g_object_new(TYPE_ITEM_LIST__T,
@@ -144,32 +172,37 @@ server_response_T* process_select_statement(const select_stmt_T *stmt, database*
 
     server_response_T *response = NEW_RESPONSE(STATUS_CODE__T_OK, "SELECT: OK\n");
     g_object_set(response, "items", items, NULL);
-    close_table(tb);
+    release_table(tb.value);
 
     return response;
 
 }
 
 server_response_T* process_insert_statement(const insert_stmt_T *stmt, database* db, const char * const name) {
-    table* tb = open_table(db, name);
-    if (!tb)
+    maybe_table tb = read_table(name, db);
+    if (tb.error)
         return NEW_RESPONSE(STATUS_CODE__T_TABLE_NOT_FOUND, "ERROR: TABLE NOT FOUND\n");
 
     if (stmt->literals->len != stmt->columns->len)
         return NEW_RESPONSE(STATUS_CODE__T_BAD_REQUEST, "BAD REQUEST: column reference count != literal count\n");
 
-    data *d = init_data(tb);
+    maybe_data d = init_data(tb.value);
+    if (d.error)
+        return NEW_RESPONSE(STATUS_CODE__T_TABLE_NOT_FOUND, "ERROR: COULD NOT INIT DATA\n");
     literal_T **literals = convert_literal_list(stmt->literals);
     columnref_T **columns = convert_column_list(stmt->columns);
     for (size_t i = 0; i < stmt->columns->len; i++) {
-        handle_data_init(d, columns[i], literals[i]);
+        handle_data_init(d.value, columns[i], literals[i]);
     }
 
-    int success = insert_data(d, db);
+    result set_error = set_data(d.value);
 
     free(literals);
     free(columns);
-    if (!success)
+    save_table(db, tb.value);
+    release_data(d.value);
+    release_table(tb.value);
+    if (set_error)
         return NEW_RESPONSE(STATUS_CODE__T_INTERNAL_ERROR, "INTERNAL SERVER ERROR\n");
 
     return NEW_RESPONSE(STATUS_CODE__T_OK, "INSERT: OK\n");
@@ -177,39 +210,56 @@ server_response_T* process_insert_statement(const insert_stmt_T *stmt, database*
 }
 
 server_response_T* process_create_statement(const create_stmt_T *stmt, database* db, const char * const name) {
-    table* tb = new_table(name, stmt->defs->len);
-    init_columns(tb, stmt->defs);
-    table_apply(db, tb);
-    close_table(tb);
+    maybe_table tb = create_table(name, db);
+    if (tb.error)
+        return NEW_RESPONSE(STATUS_CODE__T_TABLE_NOT_FOUND, "ERROR: COULD NOT INITIALIZE TABLE\n");
+    init_columns(tb.value, stmt->defs);
+    maybe_page fst_pg = create_page(db, tb.value, TABLE_DATA);
+    if (fst_pg.error) {
+        free(tb.value);
+        return NEW_RESPONSE(STATUS_CODE__T_TABLE_NOT_FOUND, "ERROR: COULD NOT INITIALIZE TABLE\n");
+    }
+    tb.value->first_page = fst_pg.value;
+    tb.value->first_page_to_write = fst_pg.value;
+    tb.value->header->first_data_page_num = fst_pg.value->pgheader->page_number;
+
+    save_table(db, tb.value);
+    release_table(tb.value);
     return g_object_new(TYPE_SERVER_RESPONSE__T,
                         "status", STATUS_CODE__T_OK,
                         "msg", "CREATE TABLE: OK\n");
 }
 
 server_response_T* process_update_statement(const update_stmt_T *stmt, database* db, const char * const name) {
-    table* tb = open_table(db, name);
-    if (!tb)
+    maybe_table tb = read_table(name, db);
+    if (tb.error)
         return NEW_RESPONSE(STATUS_CODE__T_TABLE_NOT_FOUND, "ERROR: TABLE NOT FOUND\n");
 
-    uint16_t rowsUpdated = updateWherePredicate(db, tb, stmt->predicate, stmt->set_value_list);
+    result_with_count rowsUpdated = update_where_predicate(db, tb.value, stmt->predicate, stmt->set_value_list);
     char message[64];
-
-    sprintf(message, "DELETE: OK, ROWS UPDATED: %d\n", rowsUpdated);
-    close_table(tb);
+    if (rowsUpdated.error) 
+        return NEW_RESPONSE(STATUS_CODE__T_TABLE_NOT_FOUND, "ERROR: ERROR WHILE UPDATING VALUE\n");
+    sprintf(message, "DELETE: OK, ROWS UPDATED: %d\n", rowsUpdated.count);
+    save_table(db, tb.value);
+    release_table(tb.value);
     return NEW_RESPONSE(STATUS_CODE__T_OK, g_strdup(message));
 }
 
 server_response_T* process_delete_statement(const delete_stmt_T *stmt, database* db, const char * const name) {
-    table* tb = open_table(db, name);
-    if (!tb)
+    maybe_table tb = read_table(name, db);
+    if (tb.error)
         return NEW_RESPONSE(STATUS_CODE__T_TABLE_NOT_FOUND, "ERROR: TABLE NOT FOUND\n");
 
-    uint16_t rowsRemoved = deleteWherePredicate(db, tb, stmt->predicate);
+    result_with_count rowsRemoved = delete_where_predicate(db, tb.value, stmt->predicate);
 
     char message[64];
 
-    sprintf(message, "DELETE: OK, ROWS REMOVED: %d\n", rowsRemoved);
-    close_table(tb);
+    if (rowsRemoved.error)
+        return NEW_RESPONSE(STATUS_CODE__T_TABLE_NOT_FOUND, "ERROR: ERROR WHILE DELETING VALUE\n");
+
+    sprintf(message, "DELETE: OK, ROWS REMOVED: %d\n", rowsRemoved.count);
+    save_table(db, tb.value);
+    release_table(tb.value);
     return NEW_RESPONSE(STATUS_CODE__T_OK, g_strdup(message));
 }
 

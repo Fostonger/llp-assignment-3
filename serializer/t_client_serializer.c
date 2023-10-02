@@ -6,6 +6,7 @@ insert_stmt_T* t_serialize_insert_stmt(insert_stmt* insert);
 update_stmt_T* t_serialize_update_stmt(update_stmt* update);
 delete_stmt_T* t_serialize_delete_stmt(delete_stmt* delete);
 create_stmt_T* t_serialize_create_stmt(create_stmt* create);
+join_stmt_T* t_serialize_join_stmt(join_stmt* create);
 columndef_T* t_serialize_column_def(columndef* def);
 columnref_T* t_serialize_column_ref(columnref *pColumnref);
 literal_T* t_serialize_literal(literal *pLiteral);
@@ -100,6 +101,20 @@ select_stmt_T* t_serialize_select_stmt(select_stmt* select) {
     }
     g_object_set(result,
                  "columns", columns,
+                 NULL);
+    if (select->join_stmt) {
+        g_object_set(result,
+                 "join_stmt", t_serialize_join_stmt(select->join_stmt),
+                 NULL);
+    }
+    return result;
+}
+
+join_stmt_T* t_serialize_join_stmt(join_stmt* join) {
+    join_stmt_T* result = g_object_new(TYPE_JOIN_STMT__T,NULL);
+    g_object_set(result,
+                 "join_on_table", join->join_on_table,
+                 "join_predicate", join->join_predicate,
                  NULL);
     return result;
 }

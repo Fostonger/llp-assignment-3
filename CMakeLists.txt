@@ -8,11 +8,10 @@ set(SERVER_EXE server_exe)
 set(CLIENT_EXE client_exe)
 
 set(LIB_DB server)
-set(LIB_DB_DIR server)
+set(LIB_DB_DIR server/src)
 set(LIB_PARSER client)
 set(LIB_PARSER_DIR client)
 set(CMAKE_PREFIX_PATH "/usr/local")
-
 
 set(THRIFT_LIB thrift_c_glib)
 
@@ -21,12 +20,13 @@ add_library(${LIB_DB} STATIC
         ${LIB_DB_DIR}/data.h
         ${LIB_DB_DIR}/data_iterator.c
         ${LIB_DB_DIR}/data_iterator.h
-        ${LIB_DB_DIR}/database.c
-        ${LIB_DB_DIR}/database.h
+        ${LIB_DB_DIR}/database_manager.c
+        ${LIB_DB_DIR}/database_manager.h
         ${LIB_DB_DIR}/table.c
         ${LIB_DB_DIR}/table.h
         ${LIB_DB_DIR}/util.c
         ${LIB_DB_DIR}/util.h
+        ${LIB_DB_DIR}/functional.h
         )
 
 target_include_directories(${LIB_DB} PUBLIC ${GLIB_INCLUDE_DIRS})
@@ -34,8 +34,10 @@ include_directories("/usr/local/lib/", "/opt/homebrew/Cellar/glib/2.78.0/include
 
 set(LIB_PARSER_OUT_DIR "${CMAKE_CURRENT_BINARY_DIR}")
 
+set(BISON_EXECUTABLE /opt/homebrew/Cellar/bison/3.8.2/bin/bison)
+
 find_package(FLEX REQUIRED)
-find_package(BISON REQUIRED)
+find_package(BISON 3.8.2 EXACT REQUIRED)
 
 set(LEXER_OUT "${LIB_PARSER_OUT_DIR}/lex.yy.c")
 set(PARSER_OUT "${LIB_PARSER_OUT_DIR}/sql.tab.c")
@@ -56,11 +58,15 @@ add_library(${LIB_PARSER} STATIC
         )
 target_include_directories(${LIB_PARSER} PRIVATE ${LIB_PARSER_DIR} ${LIB_PARSER_OUT_DIR})
 
-
 target_link_libraries(${LIB_DB})
 find_package(PkgConfig REQUIRED)
 
 pkg_check_modules(GLIB REQUIRED glib-2.0 gobject-2.0)
+
+link_directories("/usr/local/lib/")
+
+set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -O0 -g")
+set(CMAKE_EXE_LINKER_FLAGS_DEBUG "${CMAKE_EXE_LINKER_FLAGS_DEBUG} -O0 -g")
 
 add_executable(${SERVER_EXE}
         server.c

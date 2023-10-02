@@ -13,9 +13,9 @@
 #include <glib-object.h>
 
 #include "gen-c_glib/data_exchange_service.h"
-#include "server/database.h"
-#include "server/data_iterator.h"
-#include "server/table.h"
+#include "server/src/database_manager.h"
+#include "server/src/data_iterator.h"
+#include "server/src/table.h"
 #include "request_processor.h"
 
 
@@ -137,8 +137,10 @@ int main(int argc, char *argv[]) {
         fprintf(stderr, "Required argument: <db_filename>");
         return -1;
     }
-    FILE* file = fopen(argv[1], "wb+");
-    db = init_db(file, true);
+    maybe_database mb_db = initdb(argv[1], true);
+    if (mb_db.error)
+        return 1;
+    db = mb_db.value;
     data_exchange_handler_impl *handler;
     data_exchange_serviceProcessor *processor;
 
