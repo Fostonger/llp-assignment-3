@@ -4,6 +4,8 @@
 #include "client/data.h"
 #include <glib-2.0/glib.h>
 #include <glib-2.0/glib-object.h>
+#include <stdlib.h>
+#include <string.h>
 
 #define CONVERT_ARRAY(Item, item) \
 Item **convert_##item##_list(GPtrArray *array) { \
@@ -128,11 +130,45 @@ literal_type_T nativeTypeToThrift(column_type type) {
     }
 }
 
+table *process_join(const join_stmt_T *stmt, database *db, table *fst_tb) {
+    if (!fst_tb || !stmt->join_on_table) return NULL;
+
+    maybe_table tb = read_table(stmt->join_on_table, db);
+    if (tb.error)
+        return NULL;
+    table *snd_tb = tb.value;
+
+    column_type type = type_from_name(fst_tb->header, stmt->join_predicate->column->col_name);
+    if (type == NONE) return NULL;
+
+    char *new_name = (char *)malloc(strlen(fst_tb->header->name) + 5);
+    if (!new_name) return NULL;
+    strcpy(new_name, "join-");
+    strcpy(new_name+5, fst_tb->header->name);
+
+    maybe_table joined_tb = join_table_predicate(fst_tb, snd_tb, stmt->join_predicate, new_name);
+
+    free(new_name);
+    release_table(fst_tb);
+    release_table(snd_tb);
+
+    if (joined_tb.error) return NULL;
+
+    return joined_tb.value;
+}
+
 server_response_T* process_select_statement(const select_stmt_T *stmt, database* db, const char * const name) {
     maybe_table tb = read_table(name, db);
 
     if (tb.error)
         return NEW_RESPONSE(STATUS_CODE__T_TABLE_NOT_FOUND, "ERROR: TABLE NOT FOUND\n");
+
+    if (stmt->join_stmt) {
+        table *joined_tb = process_join(stmt->join_stmt, db, tb.value);
+        if (!joined_tb)
+            return NEW_RESPONSE(STATUS_CODE__T_TABLE_NOT_FOUND, "ERROR: TABLE NOT FOUND\n");
+        tb.value = joined_tb;
+    }
 
     maybe_data_iterator iter = init_iterator(tb.value);
     if (iter.error) {

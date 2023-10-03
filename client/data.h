@@ -87,6 +87,7 @@ struct predicate {
 struct join_stmt {
     char* join_on_table;
     predicate* join_predicate;
+    join_stmt *next_join;
 };
 
 struct select_stmt {
@@ -154,7 +155,7 @@ predicate* new_literal_predicate(columnref* col, int cmp_type, literal* liter);
 predicate* new_reference_predicate(columnref* left, int cmp_type, columnref* right);
 predicate* new_compound_predicate(predicate* left, int predicate_op, predicate* right);
 predicate* new_contains_predicate(columnref* col, char* str);
-join_stmt* new_join_stmt(char* join_on, predicate* predicate);
+join_stmt* new_join_stmt(char* join_on, predicate* predicate, join_stmt* next_join);
 set_value* new_set_value(columnref* col, literal* literal);
 set_value_list* new_set_value_list(set_value_list* prev, set_value* val);
 

@@ -264,12 +264,13 @@ statement* add_predicate_statement(statement* stmt, predicate* pred) {
     return stmt;
 }
 
-join_stmt* new_join_stmt(char* join_on, predicate* predicate) {
+join_stmt* new_join_stmt(char* join_on, predicate* predicate, join_stmt* next_join) {
     join_stmt* jstmt = malloc(sizeof(join_stmt));
     if (jstmt) {
         jstmt->join_on_table = malloc(strlen(join_on) + 1);
         strcpy(jstmt->join_on_table, join_on);
         jstmt->join_predicate = predicate;
+        jstmt->next_join = next_join;
     }
     return jstmt;
 }

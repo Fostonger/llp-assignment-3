@@ -45,6 +45,7 @@ toString_literal_type_T(int value)
   case LITERAL_TYPE__T_LIT_STRING_T:return "LITERAL_TYPE__T_LIT_STRING_T";
   case LITERAL_TYPE__T_LIT_BOOLEAN_T:return "LITERAL_TYPE__T_LIT_BOOLEAN_T";
   case LITERAL_TYPE__T_LIT_FLOAT_T:return "LITERAL_TYPE__T_LIT_FLOAT_T";
+  case LITERAL_TYPE__T_LIT_NONE_T:return "LITERAL_TYPE__T_LIT_NONE_T";
   default: g_snprintf(buf, 16, "%d", value); return buf;
   }
 }
@@ -991,7 +992,7 @@ literal__t_class_init (literal_TClass * cls)
                        NULL,
                        NULL,
                        0,
-                       3,
+                       4,
                        0,
                        G_PARAM_READWRITE));
 

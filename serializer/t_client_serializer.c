@@ -114,7 +114,7 @@ join_stmt_T* t_serialize_join_stmt(join_stmt* join) {
     join_stmt_T* result = g_object_new(TYPE_JOIN_STMT__T,NULL);
     g_object_set(result,
                  "join_on_table", join->join_on_table,
-                 "join_predicate", join->join_predicate,
+                 "join_predicate", t_serialize_predicate(join->join_predicate),
                  NULL);
     return result;
 }

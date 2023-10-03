@@ -3,7 +3,7 @@
 ## Сборка
 
 Программа тестировалась в окружении:
-- Flex 2.5.4
+- Flex 2.6.4
 - Bison 3.8.2 
 - gcc 11.3.0 
 - Apache Thrift 0.17.0
@@ -13,6 +13,7 @@
 
 ```shell
 $ export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/lib/ # чтобы слинковать glibc
+$ cmake -DCMAKE_BUILD_TYPE=Debug ..
 $ thrift --gen c_glib structs.thrift # сгенерировать структуры (уже есть в проекте)
 $ cmake --build cmake-build-debug/ # генерирует бинарники client_exe и server_exe в папке cmake-build-debug
 ```

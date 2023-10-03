@@ -40,7 +40,8 @@ enum _literal_type_T {
   LITERAL_TYPE__T_LIT_INTEGER_T = 0,
   LITERAL_TYPE__T_LIT_STRING_T = 1,
   LITERAL_TYPE__T_LIT_BOOLEAN_T = 2,
-  LITERAL_TYPE__T_LIT_FLOAT_T = 3
+  LITERAL_TYPE__T_LIT_FLOAT_T = 3,
+  LITERAL_TYPE__T_LIT_NONE_T = 4
 };
 typedef enum _literal_type_T literal_type_T;
 
